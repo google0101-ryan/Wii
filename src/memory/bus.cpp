@@ -74,24 +74,20 @@ uint32_t Bus::read32_starlet(uint32_t address)
 		{
 		case 0x0d010000:
 		case 0x0d010004:
-			data = NAND::read32_starlet(address);
-			break;
+			return NAND::read32_starlet(address);
 		case 0x0d020000:
-			data = AES::read32_starlet(address);
-			break;
+			return AES::read32_starlet(address);
 		case 0x0d030000:
 		case 0x0d030008:
 		case 0x0d03000C:
 		case 0x0d030010:
 		case 0x0d030014:
 		case 0x0d030018:
-			data = SHA::read32_starlet(address);
-			break;
+			return SHA::read32_starlet(address);
 		case 0x0d8000c0 ... 0x0d8000fc:
 			return 0;
 		case 0x0d8001f0:
-			data = OTP::read32_starlet(address);
-			break;
+			return OTP::read32_starlet(address);
 		default:
 			printf("[Bus/Starlet]: Read32 from unknown address 0x%08x\n", address);
 			exit(1);

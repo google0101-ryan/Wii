@@ -90,7 +90,6 @@ void NAND::write32_starlet(uint32_t addr, uint32_t data)
 				{
 					Bus::write8_starlet(databuf + i, local_buf[i]);
 				}
-				printf("NAND transfer done, transfering ECC\n");
 				for (int i = nand_ctrl.blocklen - 64, pos = 0; i < nand_ctrl.blocklen; i++, pos++)
 				{
 					Bus::write8_starlet(eccbuf + pos, local_buf[i]);
@@ -105,7 +104,7 @@ void NAND::write32_starlet(uint32_t addr, uint32_t data)
 			}
 			case 0xff:
 				printf("[NAND]: Reset\n");
-				nand_ctrl.value = 0;
+				nand_ctrl.exec = 0;
 				break;
 			default:
 				exit(1);

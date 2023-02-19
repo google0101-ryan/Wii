@@ -222,6 +222,12 @@ void Starlet::BranchLink(uint32_t instr)
         *registers[14] = *registers[15] - 4;
     
     *registers[15] += imm;
+
+	if (*registers[15] == 0xFFFF0588)
+	{
+		printf("Panic!\n");
+		exit(1);
+	}
     
     // Account for pipelining
     *registers[15] += 8;

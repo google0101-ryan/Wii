@@ -33,7 +33,7 @@ void PushKeyFifo(uint32_t val)
 {
 	if (key_fifo.size() == 4)
 	{
-		printf("Reseting key FIFO\n");
+		printf("[AES]: Reseting key FIFO\n");
 		key_fifo.clear();
 	}
 	else if (key_fifo.size() == 3)
@@ -48,7 +48,7 @@ void PushIVFifo(uint32_t val)
 {
 	if (iv_fifo.size() == 4)
 	{
-		printf("Reseting IV FIFO\n");
+		printf("[AES]: Reseting IV FIFO\n");
 		iv_fifo.clear();
 	}
 	else if (iv_fifo.size() == 3)
@@ -70,7 +70,8 @@ void AES::write32_starlet(uint32_t address, uint32_t value)
 		if (aes_ctrl.exec)
 		{
 			AES_init_ctx(&aes_ctx, (uint8_t*)key_fifo.data());
-			AES_ctx_set_iv(&aes_ctx, (uint8_t*)iv_fifo.data());
+			if (!aes_ctrl.iv)
+				AES_ctx_set_iv(&aes_ctx, (uint8_t*)iv_fifo.data());
 
 			uint32_t len = (aes_ctrl.blocks + 1) * 16;
 
