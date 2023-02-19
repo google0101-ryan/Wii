@@ -7,6 +7,28 @@
 
 #include <bit>
 
+union PSR
+{
+    uint32_t val;
+    struct
+    {
+        uint32_t mode : 5;
+        uint32_t t : 1;
+        uint32_t f : 1;
+        uint32_t i : 1;
+        uint32_t a : 1;
+        uint32_t e : 1;
+        uint32_t : 14;
+        uint32_t j : 1;
+        uint32_t : 2;
+        uint32_t q : 1;
+        uint32_t v : 1;
+        uint32_t c : 1;
+        uint32_t z : 1;
+        uint32_t n : 1;
+    } flags;
+} cpsr, *cur_spsr;
+
 uint32_t* registers[16];
 uint32_t regs_system[16]; // Also used for user mode
 
@@ -41,6 +63,20 @@ void Starlet::Reset()
     *registers[15] = 0xFFFF0008; // Add 8 to account for prefetch (damn prefetch)
 }
 
+bool CondPassed(uint8_t cond)
+{
+	switch (cond)
+	{
+	case 0b0101:
+		return !cpsr.flags.n;
+	case 0b1110:
+		return true;
+	default:
+		printf("[Starlet]: Unknown cond-code 0x%02x\n", cond);
+		exit(1);
+	}
+}
+
 void Starlet::Clock()
 {
     if (is_thumb)
@@ -50,6 +86,12 @@ void Starlet::Clock()
     else
     {
         uint32_t instr = Bus::read32_starlet(*registers[15] - 8);
+
+		if (!CondPassed((instr >> 28) & 0xF))
+		{
+			*registers[15] += 4;
+			return;
+		}
 
         printf("0x%08x (0x%08x): ", instr, *registers[15] - 8);
 
@@ -170,7 +212,7 @@ void Starlet::SingleDataTransfer(uint32_t instr)
     }
     else
     {
-        assert(0);
+		Bus::write32_starlet(address, *registers[rd]);
     }
 
     if (!p)
@@ -208,7 +250,8 @@ void Starlet::DataProcessing(uint32_t instr)
     if (i)
     {
         uint8_t imm = instr & 0xFF;
-        uint8_t shamt = (instr >> 8) & 0xF;
+        int shamt = (instr >> 8) & 0xF;
+		shamt *= 2;
 
         second_op = std::rotr<uint32_t>(imm, shamt);
 
@@ -245,6 +288,45 @@ void Starlet::DataProcessing(uint32_t instr)
 
     switch (opcode)
     {
+	case 0x02:
+	{
+		uint32_t result = *registers[rn] - second_op;
+
+		cpsr.flags.z = (result == 0);
+		cpsr.flags.n = (result >> 31) & 1;
+		cpsr.flags.c = second_op > *registers[rn];
+
+		printf("sub r%d, r%d, %s\n", rd, rn, second_op_disasm.c_str());
+
+		*registers[rd] = result;
+		break;
+	}
+	case 0x04:
+	{
+		uint32_t result = *registers[rn] + second_op;
+
+		cpsr.flags.z = (result == 0);
+		cpsr.flags.n = (result >> 31) & 1;
+		cpsr.flags.c = result < *registers[rn];
+
+		printf("add r%d, r%d, %s\n", rd, rn, second_op_disasm.c_str());
+
+		*registers[rd] = result;
+		break;
+	}
+	case 0x0C:
+	{
+		uint32_t result = *registers[rn] | second_op;
+
+		cpsr.flags.z = (result == 0);
+		cpsr.flags.n = (result >> 31) & 1;
+		cpsr.flags.c = false;
+
+		printf("orr r%d, r%d, %s\n", rd, rn, second_op_disasm.c_str());
+
+		*registers[rd] = result;
+		break;
+	}
     case 0x0d:
         printf("mov r%d, %s\n", rd, second_op_disasm.c_str());
         *registers[rd] = second_op;
