@@ -35,6 +35,8 @@ void SHA::write32_starlet(uint32_t address, uint32_t value)
 		sha_ctrl.value = value;
 		if (value & 0x80000000)
 		{
+
+			uint32_t og_buf = sha_src_address;
 			uint8_t* buf = new uint8_t[(sha_ctrl.blocks + 1) * 64];
 
 			for (int i = 0; i < (sha_ctrl.blocks + 1) * 64; i++)
@@ -45,7 +47,7 @@ void SHA::write32_starlet(uint32_t address, uint32_t value)
 			
 			SHA1(buf, (sha_ctrl.blocks + 1) * 64, (uint8_t*)h);
 
-			printf("[SHA]: Hash for 0x%08x is 0x%08x%08x%08x%08x%08x\n", sha_src_address - ((sha_ctrl.blocks + 1) * 64), h[0], h[1], h[2], h[3], h[4]);
+			printf("[SHA]: Hash for 0x%08x -> 0x%08x is 0x%08x%08x%08x%08x%08x\n", og_buf, sha_src_address, h[0], h[1], h[2], h[3], h[4]);
 
 			sha_ctrl.exec = 0;
 

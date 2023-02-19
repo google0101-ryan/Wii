@@ -7,6 +7,10 @@
 
 #include <src/memory/bus.h>
 
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
 uint8_t* nand;
 
 union NAND_CONF
@@ -52,13 +56,20 @@ uint32_t addr2;
 
 void NAND::LoadNAND(std::string fname)
 {
-	std::ifstream n(fname, std::ios::binary | std::ios::ate);
+	struct stat s;
 
-	size_t size = n.tellg();
-	nand = new uint8_t[size];
-	
-	n.seekg(0, std::ios::beg);
-	n.read((char*)nand, size);
+	int fd = open(fname.c_str(), O_RDWR);
+
+	fstat(fd, &s);
+	int length = s.st_size;
+
+	nand = (uint8_t*)mmap(nullptr, length, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+
+	if (nand == MAP_FAILED)
+	{
+		printf("[NAND]: Failed to memory map file %s\n", fname.c_str());
+		exit(1);
+	}
 }
 
 void NAND::write32_starlet(uint32_t addr, uint32_t data)
@@ -78,26 +89,29 @@ void NAND::write32_starlet(uint32_t addr, uint32_t data)
 				break;
 			case 0x30:
 			{
+				printf("[NAND]: Reading from page 0x%x, to 0x%08x (0x%x bytes)\n", addr2, databuf, nand_ctrl.blocklen);
+
 				uint32_t off = addr2 * 0x840;
 
 				uint8_t* local_buf = new uint8_t[nand_ctrl.blocklen];
 
 				memcpy(local_buf, (void*)&nand[off], nand_ctrl.blocklen - 64);
 
-				uint8_t* ecc_buf = new uint8_t[64];
-
 				for (int i = 0; i < nand_ctrl.blocklen - 64; i++)
 				{
 					Bus::write8_starlet(databuf + i, local_buf[i]);
 				}
-				for (int i = nand_ctrl.blocklen - 64, pos = 0; i < nand_ctrl.blocklen; i++, pos++)
+				if (nand_ctrl.ecc)
 				{
-					Bus::write8_starlet(eccbuf + pos, local_buf[i]);
+					for (int i = nand_ctrl.blocklen - 64, pos = 0; i < nand_ctrl.blocklen; i++, pos++)
+					{
+						printf("[NAND]: Transferring ecc to 0x%08x (0x%08x, 0x%08x)\n", eccbuf + pos, eccbuf, pos);
+						Bus::write8_starlet(eccbuf + pos, local_buf[i]);
+					}
 				}
 
 				nand_ctrl.exec = 0;
 
-				delete ecc_buf;
 				delete local_buf;
 
 				break;
@@ -130,7 +144,7 @@ void NAND::write32_starlet(uint32_t addr, uint32_t data)
 		break;
 	case 0x0d010014:
 		eccbuf = data;
-		printf("[NAND]: Setting ecc buf to 0x%08x\n", databuf);
+		printf("[NAND]: Setting ecc buf to 0x%08x\n", eccbuf);
 		break;
 	}
 }
