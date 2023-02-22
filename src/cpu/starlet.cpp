@@ -245,8 +245,6 @@ void Starlet::DataProcessing(uint32_t instr)
 
     switch (opcode)
     {
-    case 0x02:
-        
     case 0x0d:
         printf("mov r%d, %s\n", rd, second_op_disasm.c_str());
         *registers[rd] = second_op;
