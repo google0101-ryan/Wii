@@ -34,6 +34,17 @@ uint32_t regs_system[16]; // Also used for user mode
 
 bool is_thumb = false;
 
+bool IsBranchExchange(uint32_t opcode)
+{
+    uint32_t branchAndExchangeFormat = 0b00000001001011111111111100010000;
+
+    uint32_t formatMask = 0b00001111111111111111111111110000;
+
+    uint32_t extractedFormat = opcode & formatMask;
+
+    return extractedFormat == branchAndExchangeFormat;
+}
+
 bool IsBlockTransfer(uint32_t opcode)
 {
     return ((opcode >> 25) & 0x7) == 0b100;
@@ -67,8 +78,20 @@ bool CondPassed(uint8_t cond)
 {
 	switch (cond)
 	{
+    case 0b0000:
+        return cpsr.flags.z;
+    case 0b0001:
+        return !cpsr.flags.z;
+    case 0b0010:
+        return cpsr.flags.c;
 	case 0b0101:
 		return !cpsr.flags.n;
+    case 0b1000:
+        return cpsr.flags.c && !cpsr.flags.z;
+    case 0b1001:
+        return !cpsr.flags.c || cpsr.flags.z;
+    case 0b1011:
+        return cpsr.flags.v != cpsr.flags.n;
 	case 0b1110:
 		return true;
 	default:
@@ -95,7 +118,11 @@ void Starlet::Clock()
 
         printf("0x%08x (0x%08x): ", instr, *registers[15] - 8);
 
-        if (IsBlockTransfer(instr))
+        if (IsBranchExchange(instr))
+        {
+            BranchExchange(instr);
+        }
+        else if (IsBlockTransfer(instr))
         {
             BlockTransfer(instr);
         }
@@ -123,6 +150,20 @@ void Starlet::Dump()
 {
     for (int i = 0; i < 16; i++)
         printf("[Starlet]: r%d\t->\t0x%08x\n", i, *registers[i]);
+}
+
+void Starlet::BranchExchange(uint32_t instr)
+{
+    uint8_t rn = instr & 0xF;
+
+    uint32_t addr = *registers[rn];
+
+    if (addr & 1)
+        is_thumb = true;
+    
+    *registers[15] = (addr & ~1) + (is_thumb ? 4 : 8);
+
+    printf("bx r%d\n", rn);
 }
 
 void Starlet::BlockTransfer(uint32_t instr)
@@ -199,7 +240,7 @@ void Starlet::SingleDataTransfer(uint32_t instr)
     uint8_t rd = (instr >> 12) & 0xF;
     uint16_t offset = instr & 0xFFF;
 
-    printf("%s r%d, [r%d, #%d]\n", l ? "ldr" : "str", rd, rn, offset);
+    printf("%s%s r%d, [r%d, #%s%d]\n", l ? "ldr" : "str", b ? "b" : "", rd, rn, u ? "" : "-", offset);
 
     uint32_t address = *registers[rn];
 
@@ -208,11 +249,17 @@ void Starlet::SingleDataTransfer(uint32_t instr)
     
     if (l)
     {
-        *registers[rd] = Bus::read32_starlet(address);
+        if (b)
+            assert(0);
+        else
+            *registers[rd] = Bus::read32_starlet(address);
     }
     else
     {
-		Bus::write32_starlet(address, *registers[rd]);
+        if (b)
+            Bus::write8_starlet(address, *registers[rd]);
+        else
+    		Bus::write32_starlet(address, *registers[rd]);
     }
 
     if (!p)
@@ -239,6 +286,7 @@ void Starlet::SingleDataTransfer(uint32_t instr)
 void Starlet::DataProcessing(uint32_t instr)
 {
     bool i = (instr >> 25) & 1;
+    bool s = (instr >> 20) & 1;
     uint8_t opcode = (instr >> 21) & 0xF;
 
     uint8_t rn = (instr >> 16) & 0xF;
@@ -274,12 +322,25 @@ void Starlet::DataProcessing(uint32_t instr)
         }
         else
         {
-            uint8_t shift_type = (instr >> 1) & 3;
+            uint8_t shift_type = (instr >> 5) & 3;
             uint8_t shamt = (instr >> 7) & 0x1F;
 
             if (shamt)
             {
-                assert(0);
+                switch (shift_type)
+                {
+                case 0:
+                    second_op <<= shamt;
+                    second_op_disasm += " lsl #" + std::to_string(shamt);
+                    break;
+                case 1:
+                    second_op >>= shamt;
+                    second_op_disasm += " lsr #" + std::to_string(shamt);
+                    break;
+                default:
+                    printf("Unknown data-processing shift type %d\n", shift_type);
+                    exit(1);
+                }
             }
         }
     }
@@ -288,13 +349,49 @@ void Starlet::DataProcessing(uint32_t instr)
 
     switch (opcode)
     {
+	case 0x00:
+	{
+		uint32_t result = *registers[rn] & second_op;
+
+        if (s)
+        {
+            cpsr.flags.z = (result == 0);
+            cpsr.flags.n = (result >> 31) & 1;
+            cpsr.flags.c = false;
+        }
+
+		printf("and r%d, r%d, %s\n", rd, rn, second_op_disasm.c_str());
+
+		*registers[rd] = result;
+		break;
+	}
+	case 0x01:
+	{
+		uint32_t result = *registers[rn] ^ second_op;
+
+        if (s)
+        {
+            cpsr.flags.z = (result == 0);
+            cpsr.flags.n = (result >> 31) & 1;
+            cpsr.flags.c = false;
+        }
+
+		printf("eor r%d, r%d, %s (0x%08x, 0x%08x)\n", rd, rn, second_op_disasm.c_str(), *registers[rn], second_op);
+
+		*registers[rd] = result;
+		break;
+	}
 	case 0x02:
 	{
 		uint32_t result = *registers[rn] - second_op;
 
-		cpsr.flags.z = (result == 0);
-		cpsr.flags.n = (result >> 31) & 1;
-		cpsr.flags.c = second_op > *registers[rn];
+        if (s)
+        {
+            cpsr.flags.z = (result == 0);
+            cpsr.flags.n = (result >> 31) & 1;
+            cpsr.flags.c = !(second_op > *registers[rn]);
+            cpsr.flags.v = ((second_op & (1 << 31)) != (*registers[rn]) & (1 << 31)) && (result & (1 << 31)) == (second_op & (1 << 31));
+        }
 
 		printf("sub r%d, r%d, %s\n", rd, rn, second_op_disasm.c_str());
 
@@ -305,22 +402,70 @@ void Starlet::DataProcessing(uint32_t instr)
 	{
 		uint32_t result = *registers[rn] + second_op;
 
-		cpsr.flags.z = (result == 0);
-		cpsr.flags.n = (result >> 31) & 1;
-		cpsr.flags.c = result < *registers[rn];
+        if (s)
+        {
+            cpsr.flags.z = (result == 0);
+            cpsr.flags.n = (result >> 31) & 1;
+            cpsr.flags.c = result < *registers[rn];
+            cpsr.flags.v = ((second_op & (1 << 31)) == (*registers[rn]) & (1 << 31)) && (result & (1 << 31)) != (second_op & (1 << 31));
+        }
 
 		printf("add r%d, r%d, %s\n", rd, rn, second_op_disasm.c_str());
 
 		*registers[rd] = result;
 		break;
 	}
+	case 0x08:
+	{
+		uint32_t result = *registers[rn] & second_op;
+
+        if (s)
+        {
+            cpsr.flags.z = (result == 0);
+            cpsr.flags.n = (result >> 31) & 1;
+            cpsr.flags.c = false;
+        }
+
+		printf("tst r%d, r%d, %s\n", rd, rn, second_op_disasm.c_str());
+
+		break;
+	}
+	case 0x0A:
+	{
+		uint32_t result = *registers[rn] - second_op;
+
+        cpsr.flags.z = (result == 0);
+        cpsr.flags.n = (result >> 31) & 1;
+        cpsr.flags.c = !(second_op > *registers[rn]);
+        cpsr.flags.v = ((second_op & (1 << 31)) != (*registers[rn]) & (1 << 31)) && (result & (1 << 31)) == (second_op & (1 << 31));
+
+		printf("cmp r%d, %s (0x%08x, 0x%08x, 0x%08x)\n", rn, second_op_disasm.c_str(), *registers[rn], second_op, result);
+
+		break;
+	}
+	case 0x0B:
+	{
+		uint32_t result = *registers[rn] + second_op;
+
+		cpsr.flags.z = (result == 0);
+		cpsr.flags.n = (result >> 31) & 1;
+		cpsr.flags.c = result < *registers[rn];
+        cpsr.flags.v = ((second_op & (1 << 31)) == (*registers[rn]) & (1 << 31)) && (result & (1 << 31)) != (second_op & (1 << 31));
+
+		printf("cmn r%d, %s\n", rn, second_op_disasm.c_str());
+
+		break;
+	}
 	case 0x0C:
 	{
 		uint32_t result = *registers[rn] | second_op;
 
-		cpsr.flags.z = (result == 0);
-		cpsr.flags.n = (result >> 31) & 1;
-		cpsr.flags.c = false;
+        if (s)
+        {
+            cpsr.flags.z = (result == 0);
+            cpsr.flags.n = (result >> 31) & 1;
+            cpsr.flags.c = false;
+        }
 
 		printf("orr r%d, r%d, %s\n", rd, rn, second_op_disasm.c_str());
 
@@ -331,6 +476,22 @@ void Starlet::DataProcessing(uint32_t instr)
         printf("mov r%d, %s\n", rd, second_op_disasm.c_str());
         *registers[rd] = second_op;
         break;
+	case 0x0e:
+	{
+		uint32_t result = *registers[rn] & ~(second_op);
+
+        if (s)
+        {
+            cpsr.flags.z = (result == 0);
+            cpsr.flags.n = (result >> 31) & 1;
+            cpsr.flags.c = false;
+        }
+
+		printf("bic r%d, r%d, %s\n", rd, rn, second_op_disasm.c_str());
+
+		*registers[rd] = result;
+		break;
+	}
     default:
         printf("[Starlet]: Unknown data processing op 0x%x\n", opcode);
         exit(1);

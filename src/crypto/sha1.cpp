@@ -3,12 +3,23 @@
 #include <openssl/sha.h> // Used for hashing because I don't understand SHA1
 #include <cstdio>
 #include <cstdlib>
+#include <cassert>
+
+#include <src/memory/bus.h>
 
 static SHA_CTX sha1_ctx;
 
 union SHA_CTRL
 {
 	uint32_t value;
+	struct
+	{
+		uint32_t blocks : 10,
+		: 19,
+		err : 1,
+		irq : 1,
+		exec : 1;
+	};
 } sha_ctrl;
 
 uint32_t sha_src_address;
@@ -20,10 +31,24 @@ void SHA::write32_starlet(uint32_t address, uint32_t value)
 	case 0x0d030000:
 	{
 		sha_ctrl.value = value;
-		if (value & (1 << 31))
+		if (value & 0x80000000)
 		{
-			printf("[SHA1]: Starting SHA transfer\n");
-			exit(1);
+			printf("[SHA1]: Running transfer\n");
+
+			uint8_t* buf = new uint8_t[(sha_ctrl.blocks + 1) * 64];
+
+			for (int i = 0; i < (sha_ctrl.blocks + 1) * 64; i += 4)
+			{
+				*(uint32_t*)&buf[i] = Bus::read32_starlet(sha_src_address);
+				sha_src_address += 4;
+			}
+			
+			SHA1_Update(&sha1_ctx, (void*)buf, (sha_ctrl.blocks + 1) * 64);
+
+			sha_ctrl.exec = 0;
+
+			if (sha_ctrl.irq)
+				assert(0);
 		}
 		else
 		{
@@ -42,5 +67,14 @@ void SHA::write32_starlet(uint32_t address, uint32_t value)
 	case 0x0d030014:
 	case 0x0d030018:
 		return;
+	}
+}
+
+uint32_t SHA::read32_starlet(uint32_t address)
+{
+	switch (address)
+	{
+	case 0x0d030000:
+		return sha_ctrl.value;
 	}
 }

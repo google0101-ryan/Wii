@@ -9,6 +9,7 @@ find_package(OpenSSL REQUIRED)
 set(SOURCES src/main.cpp
 			src/memory/bus.cpp
 			src/memory/nand.cpp
+			src/memory/otp.cpp
 			src/cpu/starlet.cpp
 			src/crypto/aes.cpp
 			src/crypto/sha1.cpp)
@@ -18,4 +19,4 @@ target_link_libraries(${PROJECT_NAME} OpenSSL::Crypto)
 
 target_include_directories(wii PRIVATE ${CMAKE_SOURCE_DIR})
 
-set_property(TARGET wii PROPERTY CXX_STANDARD 23)
+set_property(TARGET wii PROPERTY CXX_STANDARD 20)

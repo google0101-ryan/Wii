@@ -85,3 +85,12 @@ void AES::write32_starlet(uint32_t address, uint32_t value)
 		return;
 	}
 }
+
+uint32_t AES::read32_starlet(uint32_t address)
+{
+	switch (address)
+	{
+	case 0x0d020000:
+		return aes_ctrl.value;
+	}
+}
