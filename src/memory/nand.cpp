@@ -82,7 +82,9 @@ void NAND::write32_starlet(uint32_t addr, uint32_t data)
 
 				uint8_t* local_buf = new uint8_t[nand_ctrl.blocklen];
 
-				memcpy(local_buf, (void*)&nand[off], nand_ctrl.blocklen);
+				memcpy(local_buf, (void*)&nand[off], nand_ctrl.blocklen - 64);
+
+				uint8_t* ecc_buf = new uint8_t[64];
 
 				for (int i = 0; i < nand_ctrl.blocklen - 64; i++)
 				{
@@ -95,6 +97,9 @@ void NAND::write32_starlet(uint32_t addr, uint32_t data)
 				}
 
 				nand_ctrl.exec = 0;
+
+				delete ecc_buf;
+				delete local_buf;
 
 				break;
 			}

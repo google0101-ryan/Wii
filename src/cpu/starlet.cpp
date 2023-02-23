@@ -84,6 +84,8 @@ bool CondPassed(uint8_t cond)
         return !cpsr.flags.z;
     case 0b0010:
         return cpsr.flags.c;
+    case 0b0011:
+        return !cpsr.flags.c;
 	case 0b0101:
 		return !cpsr.flags.n;
     case 0b1000:
@@ -238,9 +240,49 @@ void Starlet::SingleDataTransfer(uint32_t instr)
 
     uint8_t rn = (instr >> 16) & 0xF;
     uint8_t rd = (instr >> 12) & 0xF;
-    uint16_t offset = instr & 0xFFF;
 
-    printf("%s%s r%d, [r%d, #%s%d]\n", l ? "ldr" : "str", b ? "b" : "", rd, rn, u ? "" : "-", offset);
+    uint32_t offset;
+
+    if (!i)
+    {
+        offset = instr & 0xFFF;
+
+        printf("%s%s r%d, [r%d, #%s%d]\n", l ? "ldr" : "str", b ? "b" : "", rd, rn, u ? "" : "-", offset);
+    }
+    else
+    {
+        uint8_t rm = instr & 0xf;
+        uint16_t shift = (instr >> 4) & 0xFF;
+
+        offset = *registers[rm];
+        printf("%s%s r%d, [r%d, r%d]\n", l ? "ldr" : "str", b ? "b" : "", rd, rn, rm);
+
+        if (shift & 1)
+        {
+            assert(0);
+        }
+        else
+        {
+            uint8_t shift_type = (instr >> 5) & 3;
+            uint8_t shamt = (instr >> 7) & 0x1F;
+
+            if (shamt)
+            {
+                switch (shift_type)
+                {
+                case 0:
+                    offset <<= shamt;
+                    break;
+                case 1:
+                    offset >>= shamt;
+                    break;
+                default:
+                    printf("Unknown data-processing shift type %d\n", shift_type);
+                    exit(1);
+                }
+            }
+        }
+    }
 
     uint32_t address = *registers[rn];
 

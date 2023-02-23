@@ -12,6 +12,7 @@ set(SOURCES src/main.cpp
 			src/memory/otp.cpp
 			src/cpu/starlet.cpp
 			src/crypto/aes.cpp
+			src/crypto/aes_lib.cpp
 			src/crypto/sha1.cpp)
 
 add_executable(wii ${SOURCES})

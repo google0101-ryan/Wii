@@ -4,6 +4,10 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include <src/memory/bus.h>
+
+#include "aes_lib.h"
+
 union AES_CTRL
 {
 	uint32_t value;
@@ -55,16 +59,38 @@ void PushIVFifo(uint32_t val)
 	iv_fifo.push_back(val);
 }
 
+AES_ctx aes_ctx;
+
 void AES::write32_starlet(uint32_t address, uint32_t value)
 {
 	switch (address)
 	{
 	case 0x0d020000:
 		aes_ctrl.value = value;
-		if (value & (1 << 31))
+		if (aes_ctrl.exec)
 		{
-			printf("[AES]: Starting AES transfer\n");
-			exit(1);
+			AES_init_ctx(&aes_ctx, (uint8_t*)key_fifo.data());
+			AES_ctx_set_iv(&aes_ctx, (uint8_t*)iv_fifo.data());
+
+			uint32_t len = (aes_ctrl.blocks + 1) * 16;
+
+			uint8_t* buf = new uint8_t[len];
+
+			for (int i = 0; i < len; i++)
+			{
+				buf[i] = Bus::read8_starlet(src_address);
+				src_address++;
+			}
+
+			AES_CBC_decrypt_buffer(&aes_ctx, buf, len);
+
+			for (int i = 0; i < len; i++)
+			{
+				Bus::write8_starlet(dst_address, buf[i]);
+				dst_address++;
+			}
+
+			aes_ctrl.exec = 0;
 		}
 		else
 			printf("[AES]: Resetting AES engine\n");

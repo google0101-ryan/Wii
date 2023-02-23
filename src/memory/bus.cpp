@@ -38,6 +38,23 @@ void Bus::Dump()
 	sr.close();
 }
 
+uint8_t Bus::read8_starlet(uint32_t address)
+{
+	if (address >= 0x0D400000 && address < 0x0D418000)
+    {
+        return sram[address - 0x0D400000];
+    }
+	else
+	{
+		switch (address)
+		{
+		default:
+			printf("[Bus/Starlet]: Read8 from unknown address 0x%08x\n", address);
+			exit(1);
+		}
+	}
+}
+
 uint32_t Bus::read32_starlet(uint32_t address)
 {
     uint32_t data;
@@ -63,6 +80,11 @@ uint32_t Bus::read32_starlet(uint32_t address)
 			data = AES::read32_starlet(address);
 			break;
 		case 0x0d030000:
+		case 0x0d030008:
+		case 0x0d03000C:
+		case 0x0d030010:
+		case 0x0d030014:
+		case 0x0d030018:
 			data = SHA::read32_starlet(address);
 			break;
 		case 0x0d8000c0 ... 0x0d8000fc:

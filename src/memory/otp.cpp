@@ -21,22 +21,7 @@ void OTP::LoadOTP(std::string otp_name)
     }
 
     one_tp.seekg(0x100); // Offset of boo1 hash
-    one_tp.read((char*)otp, 0x14);
-
-    one_tp.seekg(0x114); // Offset of common key
-    one_tp.read((char*)&otp[5], 0x10);
-
-    one_tp.seekg(0x208); // Offset of NG_ID
-    one_tp.read((char*)&otp[9], 4);
-
-    one_tp.seekg(0x144); // Offset of NAND HMAC key
-    one_tp.read((char*)&otp[0x11], 20);
-
-    one_tp.seekg(0x158); // Offset of NAND AES key
-    one_tp.read((char*)&otp[0x16], 16);
-
-    one_tp.seekg(0x168); // Offset of PRNG AES number
-    one_tp.read((char*)&otp[0x1a], 16);
+    one_tp.read((char*)otp, 0x80);
 }
 
 uint32_t otp_ctrl = 0;
