@@ -105,7 +105,6 @@ void NAND::write32_starlet(uint32_t addr, uint32_t data)
 				{
 					for (int i = nand_ctrl.blocklen - 64, pos = 0; i < nand_ctrl.blocklen; i++, pos++)
 					{
-						printf("[NAND]: Transferring ecc to 0x%08x (0x%08x, 0x%08x)\n", eccbuf + pos, eccbuf, pos);
 						Bus::write8_starlet(eccbuf + pos, local_buf[i]);
 					}
 				}

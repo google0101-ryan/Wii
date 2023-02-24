@@ -24,24 +24,40 @@ union AES_CTRL
 	};
 } aes_ctrl;
 
-std::vector<uint32_t> key_fifo;
+std::vector<uint8_t> key_fifo;
 std::vector<uint32_t> iv_fifo;
 
 uint32_t src_address, dst_address;
 
 void PushKeyFifo(uint32_t val)
 {
-	if (key_fifo.size() == 4)
+	if (key_fifo.size() == 16)
 	{
 		printf("[AES]: Reseting key FIFO\n");
-		key_fifo.clear();
+		key_fifo.erase(key_fifo.begin());
+		key_fifo.erase(key_fifo.begin());
+		key_fifo.erase(key_fifo.begin());
+		key_fifo.erase(key_fifo.begin());
 	}
-	else if (key_fifo.size() == 3)
+	else if (key_fifo.size() == 12)
 	{
-		printf("[AES]: Key: 0x%08x%08x%08x%08x\n", key_fifo[0], key_fifo[1], key_fifo[2], val);
+		printf("[AES] Key is 0x");
+		for (int i = 0; i < 12; i++)
+			printf("%02x", key_fifo[i]);
+		printf("%02x%02x%02x%02x\n", (val >> 24) & 0xff, (val >> 16) & 0xff, (val >> 8) & 0xff, val & 0xff);
 	}
 
-	key_fifo.push_back(val);
+#if 1
+	key_fifo.push_back((val >> 24) & 0xff);
+	key_fifo.push_back((val >> 16) & 0xff);
+	key_fifo.push_back((val >> 8) & 0xff);
+	key_fifo.push_back(val & 0xff);
+#else
+	key_fifo.push_back(val & 0xff);
+	key_fifo.push_back((val >> 8) & 0xff);
+	key_fifo.push_back((val >> 16) & 0xff);
+	key_fifo.push_back((val >> 24) & 0xff);
+#endif
 }
 
 void PushIVFifo(uint32_t val)
@@ -69,11 +85,12 @@ void AES::write32_starlet(uint32_t address, uint32_t value)
 		aes_ctrl.value = value;
 		if (aes_ctrl.exec)
 		{
-			AES_init_ctx(&aes_ctx, (uint8_t*)key_fifo.data());
+			std::reverse(key_fifo.begin(), key_fifo.end());
+			AES_init_ctx(&aes_ctx, key_fifo.data());
 			if (!aes_ctrl.iv)
 				AES_ctx_set_iv(&aes_ctx, (uint8_t*)iv_fifo.data());
 
-			uint32_t len = (aes_ctrl.blocks + 1) * 16;
+			uint32_t len = ((aes_ctrl.value & 0xfff) + 1) * 16;
 
 			uint8_t* buf = new uint8_t[len];
 

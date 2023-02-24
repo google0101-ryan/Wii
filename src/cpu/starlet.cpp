@@ -7,6 +7,8 @@
 
 #include <bit>
 
+#define printf(x, ...) 0
+
 union PSR
 {
     uint32_t val;
